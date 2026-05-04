@@ -80,6 +80,7 @@ jobs:
           cache: true
 
       - name: Build server
+        shell: bash
         run: |
           GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch == 'arm-7' && 'arm' || matrix.arch }} GOARM=${{ matrix.arch == 'arm-7' && '7' || '' }} \
             go build -ldflags="-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -87,6 +88,7 @@ jobs:
             ./cmd/server
 
       - name: Build client
+        shell: bash
         run: |
           GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch == 'arm-7' && 'arm' || matrix.arch }} GOARM=${{ matrix.arch == 'arm-7' && '7' || '' }} \
             go build -ldflags="-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -94,6 +96,7 @@ jobs:
             ./cmd/client
 
       - name: Generate checksum
+        shell: bash
         run: |
           cd dist
           sha256sum * > checksums_${{ matrix.os }}_${{ matrix.arch }}.txt
