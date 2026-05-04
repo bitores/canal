@@ -40,7 +40,7 @@ func HandleHTTPRequest(conn WriteCloser, msg *protocol.Message, localAddr string
 		sendError(conn, msg.StreamID, msg.TunnelID, fmt.Sprintf("local service error: %v", err))
 		return
 	}
-	defer localResp.Body.Close()
+	defer func() { _ = localResp.Body.Close() }()
 
 	body, err := io.ReadAll(localResp.Body)
 	if err != nil {
@@ -90,7 +90,7 @@ func sendError(conn WriteCloser, streamID, tunnelID, errMsg string) {
 		Payload:  mustMarshalPayload(errPayload),
 	}
 	data, _ := protocol.Marshal(&msg)
-	conn.WriteMessage(1, data)
+	_ = conn.WriteMessage(1, data)
 }
 
 func mustMarshalPayload(v any) json.RawMessage {

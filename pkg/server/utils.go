@@ -38,12 +38,12 @@ func newReadWriteCloser(conn net.Conn) *readWriteCloser {
 }
 
 func (r *readWriteCloser) Read(p []byte) (int, error) {
-	r.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = r.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 	return r.reader.Read(p)
 }
 
 func (r *readWriteCloser) Write(p []byte) (int, error) {
-	r.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = r.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	return r.conn.Write(p)
 }
 

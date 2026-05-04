@@ -47,12 +47,13 @@ builds:
 
 archives:
   - id: default
-    builds:
+    ids:
       - server
       - client
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - LICENSE
       - README.md
@@ -60,9 +61,6 @@ archives:
 
 checksum:
   name_template: "checksums.txt"
-
-snapshot:
-  name_template: "{{ .Tag }}-next"
 
 changelog:
   sort: asc
@@ -98,7 +96,7 @@ release:
 nfpms:
   - id: server
     package_name: canal-server
-    builds:
+    ids:
       - server
     vendor: canal
     homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY }}"
@@ -109,9 +107,6 @@ nfpms:
       - deb
       - rpm
     bindir: /usr/local/bin
-    files:
-      "config/server.yaml": "/etc/canal/server.yaml"
-      "config/tokens.yaml": "/etc/canal/tokens.yaml"
     contents:
       - src: "config/server.yaml"
         dst: "/etc/canal/server.yaml"
@@ -122,7 +117,7 @@ nfpms:
 
   - id: client
     package_name: canal-client
-    builds:
+    ids:
       - client
     vendor: canal
     homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY }}"

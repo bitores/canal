@@ -17,6 +17,12 @@ var (
 	date    = "unknown"
 )
 
+func init() {
+	_ = version
+	_ = commit
+	_ = date
+}
+
 func main() {
 	cfgPath := flag.String("config", "", "config file path")
 	listenAddr := flag.String("addr", ":7000", "websocket listen address")
@@ -29,7 +35,7 @@ func main() {
 
 	cfg := config.DefaultServerConfig()
 	if *cfgPath != "" {
-		// TODO: load from YAML file
+		slog.Warn("config file loading not implemented", "path", *cfgPath)
 	}
 	if *listenAddr != ":7000" {
 		cfg.ListenAddr = *listenAddr
@@ -68,5 +74,5 @@ func main() {
 	<-sigCh
 
 	slog.Info("shutting down...")
-	srv.Stop()
+	_ = srv.Stop()
 }

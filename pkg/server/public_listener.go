@@ -99,7 +99,7 @@ func (m *PublicListenerManager) serveHTTPListener(ln net.Listener, binding *Tunn
 }
 
 func (m *PublicListenerManager) handleHTTPConn(conn net.Conn, binding *TunnelBinding) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	start := time.Now()
 
 	client, ok := m.server.clients.Get(binding.ClientID)
@@ -114,7 +114,7 @@ func (m *PublicListenerManager) handleHTTPConn(conn net.Conn, binding *TunnelBin
 		slog.Debug("failed to read HTTP request", "error", err)
 		return
 	}
-	defer req.Body.Close()
+	defer func() { _ = req.Body.Close() }()
 
 	// Check Basic Auth if configured
 	if binding.BasicAuth != nil {
@@ -136,7 +136,11 @@ func (m *PublicListenerManager) handleHTTPConn(conn net.Conn, binding *TunnelBin
 		headers[k] = vals[0]
 	}
 
-	body, _ := ioReadAll(req.Body)
+	body, err := ioReadAll(req.Body)
+	if err != nil {
+		slog.Debug("failed to read request body", "error", err)
+		body = nil
+	}
 
 	m.server.metrics.RequestsTotal.Add(1)
 
@@ -228,5 +232,5 @@ func writeHTTPResponse(conn net.Conn, statusCode int, statusText string, headers
 	} else {
 		resp.Body = ioNopCloserBytes([]byte(statusText))
 	}
-	resp.Write(conn)
+	_ = resp.Write(conn)
 }

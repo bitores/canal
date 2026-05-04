@@ -16,7 +16,7 @@ import (
 
 func main() {
 	tmpDir, _ := os.MkdirTemp("", "canal-test")
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// ====== HTTP & TCP Tunnel Tests ======
 	fmt.Println("=== Phase 1&2: HTTP + TCP Tunnels ===")
@@ -26,15 +26,15 @@ func main() {
 
 	localMux := http.NewServeMux()
 	localMux.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello! Path=%s", r.URL.Path)
+		_, _ = fmt.Fprintf(w, "Hello! Path=%s", r.URL.Path)
 	})
 	localMux.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		w.Write(body)
+		_, _ = w.Write(body)
 	})
 	localSrv := &http.Server{Addr: ":13203", Handler: localMux}
-	go localSrv.ListenAndServe()
-	defer localSrv.Close()
+	go func() { _ = localSrv.ListenAndServe() }()
+	defer func() { _ = localSrv.Close() }()
 
 	srvCfg := config.DefaultServerConfig()
 	srvCfg.ListenAddr = ":17102"
@@ -47,7 +47,7 @@ func main() {
 	if err := srv.Start(); err != nil {
 		panic(fmt.Sprintf("server start: %v", err))
 	}
-	defer srv.Stop()
+	defer func() { _ = srv.Stop() }()
 	time.Sleep(300 * time.Millisecond)
 
 	ccfg := config.DefaultClientConfig()
@@ -61,13 +61,13 @@ func main() {
 	if err := cli.Start(); err != nil {
 		panic(fmt.Sprintf("client: %v", err))
 	}
-	defer cli.Stop()
+	defer func() { _ = cli.Stop() }()
 	time.Sleep(1 * time.Second)
 
 	testHTTP(func() int {
 		for p := 18080; p <= 18180; p++ {
 			if resp, err := http.Get(fmt.Sprintf("http://localhost:%d/hello", p)); err == nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if resp.StatusCode == 200 {
 					return p
 				}
@@ -79,22 +79,22 @@ func main() {
 	testTCP(func() int {
 		for p := 19000; p <= 19100; p++ {
 			if conn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", p), 2*time.Second); err == nil {
-				conn.Close()
+				_ = conn.Close()
 				return p
 			}
 		}
 		return 0
 	}())
 
-	srv.Stop()
-	cli.Stop()
+	_ = srv.Stop()
+	_ = cli.Stop()
 	time.Sleep(200 * time.Millisecond)
 
 	// ====== Token Auth Tests ======
 	fmt.Println("\n=== Phase 3: Token Authentication ===")
 
 	tokenPath := filepath.Join(tmpDir, "tokens.yaml")
-	os.WriteFile(tokenPath, []byte(`
+	_ = os.WriteFile(tokenPath, []byte(`
 tokens:
   sk_valid_one: "client-one"
   sk_valid_two: "client-two"
@@ -112,7 +112,7 @@ tokens:
 	if err := srv2.Start(); err != nil {
 		panic(fmt.Sprintf("server2 start: %v", err))
 	}
-	defer srv2.Stop()
+	defer func() { _ = srv2.Stop() }()
 	time.Sleep(300 * time.Millisecond)
 
 	// Test 1: Valid token
@@ -125,7 +125,7 @@ tokens:
 		fmt.Printf("[FAIL] Valid token rejected: %v\n", err)
 	} else {
 		fmt.Println("[PASS] Valid token accepted")
-		cliValid.Stop()
+		_ = cliValid.Stop()
 	}
 	time.Sleep(200 * time.Millisecond)
 
@@ -137,7 +137,7 @@ tokens:
 	})
 	if err := cliInvalid.Start(); err == nil {
 		fmt.Println("[FAIL] Invalid token was accepted!")
-		cliInvalid.Stop()
+		_ = cliInvalid.Stop()
 	} else {
 		fmt.Printf("[PASS] Invalid token rejected: %v\n", err)
 	}
@@ -150,12 +150,12 @@ tokens:
 	})
 	if err := cliEmpty.Start(); err == nil {
 		fmt.Println("[FAIL] Empty token accepted when auth enabled!")
-		cliEmpty.Stop()
+		_ = cliEmpty.Stop()
 	} else {
 		fmt.Printf("[PASS] Empty token rejected\n")
 	}
 
-	srv2.Stop()
+	_ = srv2.Stop()
 	time.Sleep(200 * time.Millisecond)
 
 	// ====== Basic Auth Test ======
@@ -172,7 +172,7 @@ tokens:
 	if err := srv3.Start(); err != nil {
 		panic(fmt.Sprintf("server3 start: %v", err))
 	}
-	defer srv3.Stop()
+	defer func() { _ = srv3.Stop() }()
 	time.Sleep(300 * time.Millisecond)
 
 	// Connect with a tunnel that has basic auth
@@ -186,14 +186,14 @@ tokens:
 	if err := cliBA.Start(); err != nil {
 		panic(fmt.Sprintf("client ba: %v", err))
 	}
-	defer cliBA.Stop()
+	defer func() { _ = cliBA.Stop() }()
 	time.Sleep(1 * time.Second)
 
 	// Find the tunnel port
 	var baPort int
 	for p := 18080; p <= 18180; p++ {
 		if resp, err := http.Get(fmt.Sprintf("http://localhost:%d/hello", p)); err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == 200 {
 				baPort = p
 				break
@@ -228,7 +228,7 @@ tokens:
 	if err := srv4.Start(); err != nil {
 		panic(fmt.Sprintf("server4 start: %v", err))
 	}
-	defer srv4.Stop()
+	defer func() { _ = srv4.Stop() }()
 	time.Sleep(300 * time.Millisecond)
 
 	// Connect a client and make a request so dashboard has data
@@ -239,14 +239,14 @@ tokens:
 	if err := cli4.Start(); err != nil {
 		panic(fmt.Sprintf("client4: %v", err))
 	}
-	defer cli4.Stop()
+	defer func() { _ = cli4.Stop() }()
 	time.Sleep(1 * time.Second)
 
 	// Make an HTTP request through the tunnel so metrics are populated
 	var dashHTTPPort int
 	for p := 18080; p <= 18180; p++ {
 		if resp, err := http.Get(fmt.Sprintf("http://localhost:%d/hello", p)); err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == 200 {
 				dashHTTPPort = p
 				break
@@ -255,8 +255,8 @@ tokens:
 	}
 	if dashHTTPPort != 0 {
 		fmt.Printf("[OK] Dashboard test HTTP tunnel on port %d\n", dashHTTPPort)
-		http.Get(fmt.Sprintf("http://localhost:%d/hello", dashHTTPPort))
-		http.Get(fmt.Sprintf("http://localhost:%d/echo", dashHTTPPort))
+		_, _ = http.Get(fmt.Sprintf("http://localhost:%d/hello", dashHTTPPort))
+		_, _ = http.Get(fmt.Sprintf("http://localhost:%d/echo", dashHTTPPort))
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -266,7 +266,7 @@ tokens:
 		fmt.Printf("[FAIL] Dashboard /api/status: %v\n", err)
 	} else {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode == 200 && len(body) > 0 {
 			fmt.Printf("[PASS] Dashboard /api/status: %s\n", string(body))
 		} else {
@@ -280,7 +280,7 @@ tokens:
 		fmt.Printf("[FAIL] Dashboard /api/clients: %v\n", err)
 	} else {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode == 200 {
 			fmt.Printf("[PASS] Dashboard /api/clients: %s\n", string(body))
 		} else {
@@ -294,7 +294,7 @@ tokens:
 		fmt.Printf("[FAIL] Dashboard /api/tunnels: %v\n", err)
 	} else {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode == 200 {
 			fmt.Printf("[PASS] Dashboard /api/tunnels: %s\n", string(body))
 		} else {
@@ -308,7 +308,7 @@ tokens:
 		fmt.Printf("[FAIL] Dashboard static files: %v\n", err)
 	} else {
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode == 200 && len(body) > 0 {
 			fmt.Println("[PASS] Dashboard static files: index.html served")
 		} else {
@@ -332,7 +332,7 @@ func testHTTP(port int) {
 		return
 	}
 	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode == 200 {
 		fmt.Printf("[PASS] GET /hello: %s\n", string(body))
 	} else {
@@ -344,7 +344,7 @@ func testHTTP(port int) {
 		fmt.Printf("[FAIL] GET /404: %v\n", err)
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode == 404 {
 		fmt.Println("[PASS] GET /nonexistent: 404")
 	} else {
@@ -364,12 +364,12 @@ func testTCP(port int) {
 		fmt.Printf("[FAIL] TCP connect: %v\n", err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	testMsg := []byte("tcp-test")
-	conn.Write(testMsg)
+_, _ = conn.Write(testMsg)
 	reply := make([]byte, len(testMsg))
-	io.ReadFull(conn, reply)
+_, _ = io.ReadFull(conn, reply)
 	if string(reply) == string(testMsg) {
 		fmt.Printf("[PASS] TCP echo: %s\n", string(reply))
 	} else {
@@ -382,15 +382,15 @@ func startEchoServer(addr string) {
 	if err != nil {
 		panic(fmt.Sprintf("echo server: %v", err))
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			return
 		}
 		go func(c net.Conn) {
-			io.Copy(c, c)
-			c.Close()
+			_, _ = io.Copy(c, c)
+			_ = c.Close()
 		}(conn)
 	}
 }

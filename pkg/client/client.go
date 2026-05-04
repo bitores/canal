@@ -25,7 +25,6 @@ type Client struct {
 	writeMu        sync.Mutex
 	activeStreams  map[string]*localStream
 	streamsMu      sync.Mutex
-	mu             sync.Mutex
 	stopCh         chan struct{}
 	stopOnce       sync.Once
 }
@@ -69,7 +68,7 @@ func (c *Client) Stop() error {
 		close(c.stopCh)
 	})
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 	}
 	return nil
 }
@@ -85,7 +84,7 @@ func (c *Client) connect() error {
 	c.conn = conn
 
 	if err := c.register(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 
@@ -168,7 +167,7 @@ func (c *Client) readLoop() {
 		switch msg.Type {
 		case protocol.MsgTypeHeartbeat:
 			ack := protocol.Message{Type: protocol.MsgTypeHeartbeatAck}
-			c.sendWSMessage(&ack)
+		_ = c.sendWSMessage(&ack)
 
 		case protocol.MsgTypeHeartbeatAck:
 			// heartbeat acknowledged
@@ -240,16 +239,6 @@ func (c *Client) getStream(streamID string) *localStream {
 	return c.activeStreams[streamID]
 }
 
-func (c *Client) closeAllStreams() {
-	c.streamsMu.Lock()
-	defer c.streamsMu.Unlock()
-	for id, ls := range c.activeStreams {
-		ls.conn.Close()
-		close(ls.closeCh)
-		delete(c.activeStreams, id)
-	}
-}
-
 func (c *Client) handleTunnelOpen(msg *protocol.Message) {
 	var openPayload struct {
 		LocalAddr string `json:"local_addr"`
@@ -278,7 +267,7 @@ func (c *Client) handleTunnelOpen(msg *protocol.Message) {
 			TunnelID: msg.TunnelID,
 			Payload:  mustMarshalClient(errPayload),
 		}
-		c.sendWSMessage(&errMsg)
+		_ = c.sendWSMessage(&errMsg)
 		return
 	}
 
@@ -313,7 +302,7 @@ func (c *Client) handleTunnelData(msg *protocol.Message) {
 	if _, err := ls.conn.Write(data); err != nil {
 		slog.Debug("local TCP write error", "stream_id", msg.StreamID, "error", err)
 		if removed := c.removeStream(msg.StreamID); removed != nil {
-			removed.conn.Close()
+		_ = removed.conn.Close()
 			close(removed.closeCh)
 		}
 	}
@@ -321,7 +310,7 @@ func (c *Client) handleTunnelData(msg *protocol.Message) {
 
 func (c *Client) handleTunnelClose(msg *protocol.Message) {
 	if ls := c.removeStream(msg.StreamID); ls != nil {
-		ls.conn.Close()
+		_ = ls.conn.Close()
 		close(ls.closeCh)
 		slog.Debug("local TCP stream closed", "stream_id", msg.StreamID)
 	}
@@ -330,7 +319,7 @@ func (c *Client) handleTunnelClose(msg *protocol.Message) {
 func (c *Client) localReadPump(conn net.Conn, streamID, tunnelID string, ls *localStream) {
 	defer func() {
 		c.removeStream(streamID)
-		conn.Close()
+		_ = conn.Close()
 	}()
 
 	buf := make([]byte, 32*1024)
@@ -373,7 +362,7 @@ func (c *Client) heartbeatLoop() {
 		select {
 		case <-ticker.C:
 			msg := protocol.Message{Type: protocol.MsgTypeHeartbeat}
-			c.sendWSMessage(&msg)
+			_ = c.sendWSMessage(&msg)
 
 		case <-c.stopCh:
 			return

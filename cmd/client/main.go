@@ -21,6 +21,12 @@ var (
 	date    = "unknown"
 )
 
+func init() {
+	_ = version
+	_ = commit
+	_ = date
+}
+
 func main() {
 	serverAddr := flag.String("server", "ws://localhost:7000", "server websocket address")
 	tunnelFlag := flag.String("tunnel", "", "tunnel in format 'type:localaddr' e.g. 'http:localhost:3000' or 'tcp:localhost:22'")
@@ -73,5 +79,5 @@ func main() {
 	<-sigCh
 
 	slog.Info("shutting down...")
-	cli.Stop()
+	_ = cli.Stop()
 }

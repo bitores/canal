@@ -20,7 +20,6 @@ type ClientSession struct {
 	writeMu       sync.Mutex
 	activeStreams map[string]*tcpStream
 	streamsMu     sync.Mutex
-	mu            sync.Mutex
 }
 
 type tcpStream struct {
@@ -73,7 +72,7 @@ func (s *ClientSession) closeAllStreams() {
 	s.streamsMu.Lock()
 	defer s.streamsMu.Unlock()
 	for id, stream := range s.activeStreams {
-		stream.conn.Close()
+		_ = stream.conn.Close()
 		close(stream.closeCh)
 		delete(s.activeStreams, id)
 	}
@@ -104,7 +103,7 @@ func (r *ClientRegistry) Remove(clientID string) {
 		session.closeAllStreams()
 		for _, tb := range session.Tunnels {
 			if tb.Listener != nil {
-				tb.Listener.Close()
+				_ = tb.Listener.Close()
 			}
 		}
 		delete(r.clients, clientID)
@@ -184,24 +183,6 @@ func writeTunnelClose(conn WSConn, writeMu *sync.Mutex, streamID, tunnelID strin
 		Type:     protocol.MsgTypeTunnelClose,
 		StreamID: streamID,
 		TunnelID: tunnelID,
-	}
-
-	writeMu.Lock()
-	defer writeMu.Unlock()
-	msgData, err := protocol.Marshal(&msg)
-	if err != nil {
-		return err
-	}
-	return conn.WriteMessage(1, msgData)
-}
-
-func writeTunnelError(conn WSConn, writeMu *sync.Mutex, streamID, tunnelID, errMsg string) error {
-	payload := map[string]string{"error": errMsg}
-	msg := protocol.Message{
-		Type:     protocol.MsgTypeTunnelError,
-		StreamID: streamID,
-		TunnelID: tunnelID,
-		Payload:  mustMarshal(payload),
 	}
 
 	writeMu.Lock()

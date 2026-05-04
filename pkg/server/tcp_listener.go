@@ -81,7 +81,7 @@ func (m *TCPListenerManager) handleTCPConn(tcpConn net.Conn, binding *TunnelBind
 	client, ok := m.server.clients.Get(binding.ClientID)
 	if !ok {
 		slog.Warn("client not found for TCP tunnel", "tunnel_id", binding.TunnelID)
-		tcpConn.Close()
+		_ = tcpConn.Close()
 		return
 	}
 
@@ -112,7 +112,7 @@ func (m *TCPListenerManager) handleTCPConn(tcpConn net.Conn, binding *TunnelBind
 		slog.Error("failed to send tunnel_open", "error", err)
 		client.removeStream(streamID)
 		m.server.metrics.ActiveStreams.Add(-1)
-		tcpConn.Close()
+		_ = tcpConn.Close()
 		return
 	}
 
@@ -130,9 +130,9 @@ func (m *TCPListenerManager) readPump(tcpConn net.Conn, client *ClientSession, s
 	var totalBytes int64
 	defer func() {
 		m.server.metrics.TCPBytesRecv.Add(totalBytes)
-		writeTunnelClose(client.Conn, &client.writeMu, stream.streamID, binding.TunnelID)
+		_ = writeTunnelClose(client.Conn, &client.writeMu, stream.streamID, binding.TunnelID)
 		client.removeStream(stream.streamID)
-		tcpConn.Close()
+		_ = tcpConn.Close()
 	}()
 
 	buf := make([]byte, 32*1024)
@@ -180,7 +180,7 @@ func (s *Server) handleTunnelData(client *ClientSession, msg *protocol.Message) 
 	if _, err := stream.conn.Write(data); err != nil {
 		slog.Debug("TCP write error", "stream_id", msg.StreamID, "error", err)
 		if removed := client.removeStream(msg.StreamID); removed != nil {
-			removed.conn.Close()
+		_ = removed.conn.Close()
 			close(removed.closeCh)
 		}
 		return

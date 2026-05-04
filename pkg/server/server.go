@@ -65,7 +65,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"status":"ok","service":"canal"}`))
+			_, _ = w.Write([]byte(`{"status":"ok","service":"canal"}`))
 			return
 		}
 		http.NotFound(w, r)
@@ -106,7 +106,7 @@ func (s *Server) Stop() error {
 		close(s.stopCh)
 	})
 	if s.dashboard != nil {
-		s.dashboard.Stop()
+		_ = s.dashboard.Stop()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -125,14 +125,14 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	_, msgData, err := conn.ReadMessage()
 	if err != nil {
 		slog.Error("failed to read initial message", "error", err)
-		conn.Close()
+		_ = conn.Close()
 		return
 	}
 
 	var msg protocol.Message
 	if err := protocol.Unmarshal(msgData, &msg); err != nil {
 		slog.Error("failed to unmarshal message", "error", err)
-		conn.Close()
+		_ = conn.Close()
 		return
 	}
 
@@ -157,7 +157,7 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			slog.Warn("invalid token", "token", regPayload.Token)
 			sendRegisterError(conn, "invalid authentication token")
-			conn.Close()
+			_ = conn.Close()
 			return
 		}
 		slog.Info("token validated", "label", tokenLabel)
@@ -226,7 +226,7 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	if err := conn.WriteMessage(1, ackData); err != nil {
 		slog.Error("failed to send register ack", "error", err)
 		s.clients.Remove(clientID)
-		conn.Close()
+		_ = conn.Close()
 		return
 	}
 
@@ -243,15 +243,15 @@ func sendRegisterError(conn *websocket.Conn, errMsg string) {
 		Payload: mustMarshal(ack),
 	}
 	data, _ := protocol.Marshal(&msg)
-	conn.WriteMessage(1, data)
-	conn.Close()
+	_ = conn.WriteMessage(1, data)
+	_ = conn.Close()
 }
 
 func (s *Server) handleClientMessages(clientID string, session *ClientSession) {
 	conn := session.Conn
 	defer func() {
 		s.clients.Remove(clientID)
-		conn.Close()
+		_ = conn.Close()
 	}()
 
 	for {
@@ -270,7 +270,7 @@ func (s *Server) handleClientMessages(clientID string, session *ClientSession) {
 		switch msg.Type {
 		case protocol.MsgTypeHeartbeat:
 			ack := protocol.Message{Type: protocol.MsgTypeHeartbeatAck}
-			session.Send(&ack)
+			_ = session.Send(&ack)
 
 		case protocol.MsgTypeHTTPResponse:
 			s.pendingRespMu.Lock()
