@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Integration test
+        run: go run ./cmd/integration_test/
+
+  build:
+    name: Build (${{ matrix.os }}/${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+          - os: linux
+            arch: arm64
+            runner: ubuntu-latest
+          - os: darwin
+            arch: amd64
+            runner: macos-latest
+          - os: darwin
+            arch: arm64
+            runner: macos-latest
+          - os: windows
+            arch: amd64
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Build server
+        run: go build -ldflags="-s -w" -o "dist/canal-server_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}" ./cmd/server
+
+      - name: Build client
+        run: go build -ldflags="-s -w" -o "dist/canal-client_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.os == 'windows' && '.exe' || '' }}" ./cmd/client
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  docker:
+    name: Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          build-args: TARGET=server
+          tags: canal-server:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build client image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          build-args: TARGET=client
+          tags: canal-client:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

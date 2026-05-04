@@ -1,0 +1,170 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: server
+    main: ./cmd/server
+    binary: canal-server
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - 7
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    tags:
+      - server
+
+  - id: client
+    main: ./cmd/client
+    binary: canal-client
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - 7
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    tags:
+      - client
+
+archives:
+  - id: default
+    builds:
+      - server
+      - client
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - config/*.yaml
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+    name: "{{ .Env.GITHUB_REPOSITORY_NAME }}"
+  draft: true
+  prerelease: auto
+  mode: replace
+  header: |
+    ## 发布说明
+
+    ### 下载
+
+    请根据你的操作系统和架构选择对应的二进制文件。
+
+    | 平台 | 架构 | 文件 |
+    |------|------|------|
+    | Linux | amd64 | `canal-server_linux_amd64` / `canal-client_linux_amd64` |
+    | Linux | arm64 | `canal-server_linux_arm64` / `canal-client_linux_arm64` |
+    | macOS  | amd64 | `canal-server_darwin_amd64` / `canal-client_darwin_amd64` |
+    | macOS  | arm64 | `canal-server_darwin_arm64` / `canal-client_darwin_arm64` |
+    | Windows | amd64 | `canal-server_windows_amd64.exe` / `canal-client_windows_amd64.exe` |
+
+nfpms:
+  - id: server
+    package_name: canal-server
+    builds:
+      - server
+    vendor: canal
+    homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY }}"
+    maintainer: "developer"
+    description: "Self-hosted ngrok alternative - server component"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+    files:
+      "config/server.yaml": "/etc/canal/server.yaml"
+      "config/tokens.yaml": "/etc/canal/tokens.yaml"
+    contents:
+      - src: "config/server.yaml"
+        dst: "/etc/canal/server.yaml"
+        type: config
+      - src: "config/tokens.yaml"
+        dst: "/etc/canal/tokens.yaml"
+        type: config
+
+  - id: client
+    package_name: canal-client
+    builds:
+      - client
+    vendor: canal
+    homepage: "https://github.com/{{ .Env.GITHUB_REPOSITORY }}"
+    maintainer: "developer"
+    description: "Self-hosted ngrok alternative - client component"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+
+dockers:
+  - id: server-docker
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "{{ .Env.REGISTRY }}/canal-server:latest"
+      - "{{ .Env.REGISTRY }}/canal-server:{{ .Tag }}"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title=canal-server"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--build-arg=TARGET=server"
+    extra_files:
+      - config/
+
+  - id: client-docker
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "{{ .Env.REGISTRY }}/canal-client:latest"
+      - "{{ .Env.REGISTRY }}/canal-client:{{ .Tag }}"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title=canal-client"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--build-arg=TARGET=client"
+    extra_files:
+      - config/

@@ -1,0 +1,4 @@
+# Token authentication file
+# Generate tokens: openssl rand -hex 24
+tokens:
+  sk_example_token_123: "my-client"

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash( *)",
+      "Bash(go version *)",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(data[0]['text']\\)\")",
+      "Bash(go mod *)",
+      "Bash(winget install *)",
+      "Bash(mkdir -p \"e:/ai-ws/ai-cpolar\")",
+      "Bash(mkdir -p cmd/server cmd/client pkg/protocol pkg/tunnel pkg/server pkg/client pkg/auth pkg/config pkg/dashboard/static)"
+    ]
+  }
+}

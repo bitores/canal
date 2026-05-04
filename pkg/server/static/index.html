@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>canal Dashboard</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
+.header { background: #1e293b; padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 16px; }
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .status { margin-left: auto; display: flex; gap: 24px; font-size: 13px; }
+.header .status span { color: #94a3b8; }
+.header .status strong { color: #22c55e; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 20px 24px; }
+.stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; }
+.stat-card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; color: #38bdf8; }
+.content { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 24px 24px; }
+.section { background: #1e293b; border: 1px solid #334155; border-radius: 8px; overflow: hidden; }
+.section.full { grid-column: 1 / -1; }
+.section h2 { font-size: 14px; font-weight: 600; padding: 12px 16px; background: #1e293b; border-bottom: 1px solid #334155; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 8px 16px; color: #64748b; font-weight: 500; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #334155; }
+td { padding: 8px 16px; border-bottom: 1px solid #1e293b; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+td.method { font-weight: 600; }
+td.get { color: #22c55e; }
+td.post { color: #f59e0b; }
+td.put { color: #3b82f6; }
+td.delete { color: #ef4444; }
+.code { color: #38bdf8; }
+.time { color: #64748b; font-size: 11px; }
+.empty { padding: 24px; text-align: center; color: #64748b; font-size: 13px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+.badge.http { background: #1e3a5f; color: #60a5fa; }
+.badge.tcp { background: #3b1e5f; color: #c084fc; }
+.badge.online { background: #052e16; color: #4ade80; }
+a { color: #38bdf8; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.error { color: #ef4444; }
+@media (max-width: 900px) { .content { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔌 canal</h1>
+  <div class="status">
+    <span>Uptime: <strong id="uptime">-</strong></span>
+    <span>Clients: <strong id="clientCount">0</strong></span>
+    <span>Data: <strong id="dataVol">0 B</strong></span>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-card"><div class="label">Active Clients</div><div class="value" id="statClients">0</div></div>
+  <div class="stat-card"><div class="label">Active Tunnels</div><div class="value" id="statTunnels">0</div></div>
+  <div class="stat-card"><div class="label">Requests</div><div class="value" id="statRequests">0</div></div>
+  <div class="stat-card"><div class="label">Active Streams</div><div class="value" id="statStreams">0</div></div>
+  <div class="stat-card"><div class="label">Bytes Sent</div><div class="value" id="statSent">0 B</div></div>
+  <div class="stat-card"><div class="label">Bytes Received</div><div class="value" id="statRecv">0 B</div></div>
+</div>
+
+<div class="content">
+  <div class="section">
+    <h2>Clients</h2>
+    <div id="clientList"><div class="empty">No clients connected</div></div>
+  </div>
+  <div class="section">
+    <h2>Tunnels</h2>
+    <div id="tunnelList"><div class="empty">No tunnels active</div></div>
+  </div>
+  <div class="section full">
+    <h2>Request History</h2>
+    <table><thead><tr>
+      <th>Time</th><th>Method</th><th>Path</th><th>Status</th><th>Bytes</th><th>Duration</th>
+    </tr></thead><tbody id="requestLog"><tr><td colspan="6" class="empty">Waiting for requests...</td></tr></tbody></table>
+  </div>
+</div>
+
+<script>
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let v = b;
+  while (v >= 1024 && i < units.length-1) { v /= 1024; i++; }
+  return v.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+function fmtDur(ms) {
+  if (!ms) return '-';
+  if (ms < 1000) return ms + 'ms';
+  return (ms/1000).toFixed(1) + 's';
+}
+
+async function fetchJSON(url) {
+  try {
+    const r = await fetch(url);
+    return await r.json();
+  } catch { return null; }
+}
+
+function renderClients(clients) {
+  if (!clients || !clients.length) return '<div class="empty">No clients connected</div>';
+  return '<table><thead><tr><th>ID</th><th>Label</th><th>Tunnels</th><th>Status</th></tr></thead><tbody>' +
+    clients.map(c => `<tr>
+      <td class="code">${c.id.slice(0,8)}</td>
+      <td>${c.token_label || '-'}</td>
+      <td>${(c.tunnels||[]).length}</td>
+      <td><span class="badge online">online</span></td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+function renderTunnels(tunnels) {
+  if (!tunnels || !tunnels.length) return '<div class="empty">No tunnels active</div>';
+  return '<table><thead><tr><th>ID</th><th>Type</th><th>Public URL</th><th>Local</th></tr></thead><tbody>' +
+    tunnels.map(t => `<tr>
+      <td class="code">${t.tunnel_id}</td>
+      <td><span class="badge ${t.type}">${t.type}</span></td>
+      <td><a href="${t.public_url}" target="_blank">${t.public_url}</a></td>
+      <td class="code">${t.local_addr}</td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+function renderRequests(requests) {
+  if (!requests || !requests.length) return '<tr><td colspan="6" class="empty">No requests yet</td></tr>';
+  return requests.map(r => {
+    const m = (r.method||'').toLowerCase();
+    return `<tr>
+      <td class="time">${(r.time||'').slice(11,19)}</td>
+      <td><span class="method ${m}">${r.method||'-'}</span></td>
+      <td class="code">${r.path||'-'}</td>
+      <td>${r.status_code || '-'}</td>
+      <td>${fmtBytes(r.bytes_sent + r.bytes_recv)}</td>
+      <td>${fmtDur(r.duration_ms)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function refresh() {
+  const status = await fetchJSON('/api/status');
+  if (status) {
+    document.getElementById('uptime').textContent = status.uptime || '-';
+    document.getElementById('clientCount').textContent = status.clients || 0;
+    document.getElementById('dataVol').textContent = fmtBytes((status.bytes_sent||0)+(status.bytes_received||0));
+    document.getElementById('statClients').textContent = status.clients || 0;
+    document.getElementById('statTunnels').textContent = status.tunnels || 0;
+    document.getElementById('statRequests').textContent = status.requests_total || 0;
+    document.getElementById('statStreams').textContent = status.active_streams || 0;
+    document.getElementById('statSent').textContent = fmtBytes(status.bytes_sent||0);
+    document.getElementById('statRecv').textContent = fmtBytes(status.bytes_received||0);
+  }
+
+  const [clients, tunnels, requests] = await Promise.all([
+    fetchJSON('/api/clients'),
+    fetchJSON('/api/tunnels'),
+    fetchJSON('/api/requests?limit=30'),
+  ]);
+
+  if (clients) document.getElementById('clientList').innerHTML = renderClients(clients);
+  if (tunnels) document.getElementById('tunnelList').innerHTML = renderTunnels(tunnels);
+  if (requests) document.getElementById('requestLog').innerHTML = renderRequests(requests);
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

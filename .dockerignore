@@ -1,0 +1,7 @@
+.git
+*.exe
+*.test
+tmp/
+*.md
+client.exe
+server.exe

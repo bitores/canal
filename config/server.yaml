@@ -1,0 +1,9 @@
+# canal server config
+listen_addr: ":7000"
+public_host: "localhost"
+tls_cert_file: ""
+tls_key_file: ""
+token_file: "/etc/canal/tokens.yaml"
+dashboard_addr: ":8080"
+http_port_range: "18080-18180"
+tcp_port_range: "19000-19100"

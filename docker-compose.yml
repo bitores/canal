@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+      args:
+        TARGET: server
+    container_name: canal-server
+    restart: unless-stopped
+    ports:
+      - "7000:7000"
+      - "8080:8080"
+      - "18080-18180:18080-18180"
+      - "19000-19100:19000-19100"
+    volumes:
+      - ./config/server.yaml:/etc/canal/config.yaml:ro
+      - ./config/tokens.yaml:/etc/canal/tokens.yaml:ro
+      - ./certs:/etc/canal/certs:ro
+    environment:
+      - TZ=Asia/Shanghai
+    command: ["-config", "/etc/canal/config.yaml"]
+
+  server-noauth:
+    build:
+      context: .
+      args:
+        TARGET: server
+    container_name: canal-server-noauth
+    restart: unless-stopped
+    ports:
+      - "7000:7000"
+      - "8080:8080"
+      - "18080-18180:18080-18180"
+      - "19000-19100:19000-19100"
+    command: ["-addr", ":7000", "-host", "localhost", "-dashboard-addr", ":8080"]
+
+  client:
+    build:
+      context: .
+      args:
+        TARGET: client
+    container_name: canal-client
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai
+    command: ["-server", "ws://your-server.com:7000", "-tunnel", "http:localhost:3000"]
