@@ -16,22 +16,44 @@
 
 ## 快速开始
 
-### 1. 编译
+### 1. 下载预编译二进制
+
+从 [Releases](https://github.com/{{REPO}}/releases) 页面下载对应平台的压缩包，解压后即可使用：
+
+```bash
+# 解压
+tar xzf canal_<version>_linux_amd64.tar.gz
+cd canal_<version>_linux_amd64
+```
+
+或以 `.deb` / `.rpm` 包安装：
+
+```bash
+# Debian/Ubuntu
+sudo dpkg -i canal-server_<version>_linux_amd64.deb
+sudo dpkg -i canal-client_<version>_linux_amd64.deb
+
+# RHEL/Fedora
+sudo rpm -ivh canal-server_<version>_linux_amd64.rpm
+sudo rpm -ivh canal-client_<version>_linux_amd64.rpm
+```
+
+### 2. 自行编译
 
 ```bash
 # 克隆项目
 git clone <repo-url> && cd canal
 
 # 编译服务端和客户端
-go build -o server ./cmd/server
-go build -o client ./cmd/client
+go build -o canal-server ./cmd/server
+go build -o canal-client ./cmd/client
 ```
 
-### 2. 启动服务端
+### 3. 启动服务端
 
 ```bash
 # 在公网 VPS 上执行
-./server --addr :7000 --host your-server.com
+./canal-server --addr :7000 --host your-server.com
 ```
 
 参数说明：
@@ -45,11 +67,11 @@ go build -o client ./cmd/client
 | `--token-file` | `""` | Token 认证文件路径 |
 | `--config` | `""` | 配置文件路径 |
 
-### 3. 启动客户端
+### 4. 启动客户端
 
 ```bash
 # 在内网机器上执行
-./client --server ws://your-server.com:7000 --tunnel http:localhost:3000
+./canal-client --server ws://your-server.com:7000 --tunnel http:localhost:3000
 ```
 
 参数说明：
@@ -61,7 +83,7 @@ go build -o client ./cmd/client
 | `--token` | `""` | 认证令牌 |
 | `--insecure` | `false` | 跳过 TLS 证书验证 |
 
-### 4. 访问内网服务
+### 5. 访问内网服务
 
 启动后服务端会输出隧道公网地址：
 
@@ -75,13 +97,13 @@ INFO tunnel active id=web url=http://your-server.com:18080
 
 ```bash
 # 终端 1：服务端
-./server --addr :7000 --host tunnel.example.com
+./canal-server --addr :7000 --host tunnel.example.com
 
 # 终端 2：启动本地测试服务
 python -m http.server 3000
 
 # 终端 3：客户端 - 暴露本地 3000 端口和 SSH 服务
-./client --server ws://tunnel.example.com:7000 \
+./canal-client --server ws://tunnel.example.com:7000 \
   --tunnel http:localhost:3000 \
   --tunnel tcp:localhost:22
 
@@ -154,19 +176,19 @@ tunnels:
 1. **启用 TLS**：使用 Let's Encrypt 为 WebSocket 连接加密
 
    ```
-   ./server --addr :443 --tls-cert fullchain.pem --tls-key privkey.pem
+   ./canal-server --addr :443 --tls-cert fullchain.pem --tls-key privkey.pem
    ```
 
 2. **配置 Token 认证**：防止未授权客户端连接
 
    ```
-   ./server --token-file tokens.yaml
+   ./canal-server --token-file tokens.yaml
    ```
 
 3. **客户端使用 WSS**：
 
    ```
-   ./client --server wss://tunnel.example.com:443 --token sk_abc123
+   ./canal-client --server wss://tunnel.example.com:443 --token sk_abc123
    ```
 
 4. **限制端口范围**：通过防火墙限制仅有必要端口对外开放
