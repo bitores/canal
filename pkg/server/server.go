@@ -113,6 +113,10 @@ func (s *Server) Stop() error {
 	return s.httpServer.Shutdown(ctx)
 }
 
+func (s *Server) TokenStore() *auth.TokenStore {
+	return s.tokenStore
+}
+
 func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {

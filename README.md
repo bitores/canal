@@ -71,7 +71,7 @@ go build -o canal-client ./cmd/client
 
 ```bash
 # 在内网机器上执行
-./canal-client --server ws://your-server.com:7000 --tunnel http:localhost:3000
+./canal-client --server ws://your-server.com:7000 http 3000
 ```
 
 参数说明：
@@ -79,9 +79,27 @@ go build -o canal-client ./cmd/client
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--server` | `ws://localhost:7000` | 服务端 WebSocket 地址 |
-| `--tunnel` | — | 隧道定义，格式 `type:localaddr`，可重复使用 |
 | `--token` | `""` | 认证令牌 |
 | `--insecure` | `false` | 跳过 TLS 证书验证 |
+
+位置参数（隧道定义）：
+
+```bash
+# HTTP 隧道 — 暴露本地 3000 端口
+./canal-client http 3000
+
+# TCP 隧道 — 暴露本地 SSH 服务
+./canal-client tcp 22
+
+# 简写（默认 HTTP）— 暴露本地 3000 端口
+./canal-client 3000
+
+# 多个隧道
+./canal-client http 3000 tcp 22
+
+# 指定完整本地地址
+./canal-client http 192.168.1.5:3000
+```
 
 ### 5. 访问内网服务
 
@@ -92,6 +110,41 @@ INFO tunnel active id=web url=http://your-server.com:18080
 ```
 
 浏览器访问 `http://your-server.com:18080` 即可访问内网的 `localhost:3000` 服务。
+
+### 6. 配置 Token 认证（可选）
+
+防止未授权客户端连接到你的隧道。
+
+```bash
+# 1. 生成随机 token
+openssl rand -hex 24
+
+# 2. 创建令牌文件
+cat > tokens.yaml <<'EOF'
+tokens:
+  sk_5f8a2b1c...: "my-client"
+EOF
+
+# 3. 服务端加载令牌文件启动
+./canal-server --addr :7000 --host your-server.com --token-file tokens.yaml
+
+# 4. 客户端携带 token 连接
+./canal-client --server ws://your-server.com:7000 --token sk_5f8a2b1c... http 3000
+```
+
+如果服务端不配置 `--token-file`，则接受所有连接（开放模式）。
+
+也可以通过 Dashboard 生成 token：
+
+```bash
+# 服务端启动后，通过 Dashboard 生成 token（无需手动编辑文件）
+curl -X POST http://localhost:8080/api/tokens -H "Content-Type: application/json" \
+  -d '{"label":"my-client"}'
+
+# 返回: {"token":"sk_abc123...","label":"my-client"}
+```
+
+Dashboard Web 界面也提供 Token 管理功能，访问 `http://your-server.com:8080` 进入 "Token 管理" 面板即可生成和查看 token。令牌文件格式详见"客户端配置"章节。
 
 ### 完整示例
 
@@ -104,8 +157,7 @@ python -m http.server 3000
 
 # 终端 3：客户端 - 暴露本地 3000 端口和 SSH 服务
 ./canal-client --server ws://tunnel.example.com:7000 \
-  --tunnel http:localhost:3000 \
-  --tunnel tcp:localhost:22
+  http 3000 tcp 22
 
 # 终端 4：公网访问
 curl http://tunnel.example.com:18080/          # → 本地 3000 端口

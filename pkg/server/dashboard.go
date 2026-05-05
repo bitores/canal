@@ -37,6 +37,7 @@ func (d *DashboardServer) Start() error {
 	mux.HandleFunc("/api/tunnels", d.handleTunnels)
 	mux.HandleFunc("/api/requests", d.handleRequests)
 	mux.HandleFunc("/api/metrics", d.handleMetrics)
+	mux.HandleFunc("/api/tokens", d.handleTokens)
 
 	staticFS, err := fs.Sub(dashboardStatic, "static")
 	if err != nil {
@@ -155,6 +156,38 @@ func (d *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request) 
 		"uptime":         d.metrics.Uptime(),
 	}
 	writeJSON(w, resp)
+}
+
+func (d *DashboardServer) handleTokens(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		entries := d.server.TokenStore().List()
+		writeJSON(w, entries)
+
+	case "POST":
+		var req struct {
+			Label string `json:"label"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, 400)
+			return
+		}
+		if req.Label == "" {
+			http.Error(w, `{"error":"label is required"}`, 400)
+			return
+		}
+
+		token, err := d.server.TokenStore().Generate(req.Label)
+		if err != nil {
+			writeJSON(w, map[string]string{"error": err.Error()})
+			return
+		}
+		slog.Info("token generated", "label", req.Label)
+		writeJSON(w, map[string]string{"token": token, "label": req.Label})
+
+	default:
+		http.Error(w, `{"error":"method not allowed"}`, 405)
+	}
 }
 
 func clientToMap(c *ClientSession) map[string]any {

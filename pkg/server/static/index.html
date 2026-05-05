@@ -16,6 +16,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; }
 .stat-card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; color: #38bdf8; }
+.token-section { padding: 0 24px 24px; }
+.token-box { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-top: 12px; }
+.token-box h3 { font-size: 13px; color: #94a3b8; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.token-form { display: flex; gap: 8px; margin-bottom: 12px; }
+.token-form input { flex: 1; background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 8px 12px; color: #e2e8f0; font-size: 13px; outline: none; }
+.token-form input:focus { border-color: #38bdf8; }
+.token-form button { background: #38bdf8; border: none; border-radius: 4px; padding: 8px 16px; color: #0f172a; font-weight: 600; font-size: 13px; cursor: pointer; }
+.token-form button:hover { background: #7dd3fc; }
+.token-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+.token-result { background: #052e16; border: 1px solid #22c55e; border-radius: 4px; padding: 12px; margin-bottom: 12px; display: none; }
+.token-result .token-key { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; color: #4ade80; word-break: break-all; }
+.token-result .token-copy { background: #22c55e; border: none; border-radius: 4px; padding: 4px 10px; color: #052e16; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 8px; }
+.token-result .token-copy:hover { background: #4ade80; }
+.token-result .token-hint { font-size: 12px; color: #86efac; margin-top: 4px; }
+.token-error { color: #ef4444; font-size: 13px; padding: 8px 0; }
 .content { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 24px 24px; }
 .section { background: #1e293b; border: 1px solid #334155; border-radius: 8px; overflow: hidden; }
 .section.full { grid-column: 1 / -1; }
@@ -58,6 +73,25 @@ a:hover { text-decoration: underline; }
   <div class="stat-card"><div class="label">Active Streams</div><div class="value" id="statStreams">0</div></div>
   <div class="stat-card"><div class="label">Bytes Sent</div><div class="value" id="statSent">0 B</div></div>
   <div class="stat-card"><div class="label">Bytes Received</div><div class="value" id="statRecv">0 B</div></div>
+</div>
+
+<div class="token-section">
+  <div class="token-box">
+    <h3>Token 管理</h3>
+    <div class="token-form">
+      <input type="text" id="tokenLabel" placeholder="输入客户端名称 (如: my-server)" />
+      <button id="genBtn" onclick="generateToken()">生成</button>
+    </div>
+    <div id="tokenResult" class="token-result">
+      <div>
+        <code class="token-key" id="tokenKey"></code>
+        <button class="token-copy" onclick="copyToken()">复制</button>
+      </div>
+      <div class="token-hint">请在客户端使用 --token 参数配置此密钥</div>
+    </div>
+    <div id="tokenError" class="token-error" style="display:none"></div>
+    <table><thead><tr><th>Token</th><th>Label</th></tr></thead><tbody id="tokenList"><tr><td colspan="2" class="empty">加载中...</td></tr></tbody></table>
+  </div>
 </div>
 
 <div class="content">
@@ -137,6 +171,57 @@ function renderRequests(requests) {
   }).join('');
 }
 
+function renderTokens(tokens) {
+  if (!tokens || !tokens.length) return '<tr><td colspan="2" class="empty">No tokens configured</td></tr>';
+  return tokens.map(t => `<tr>
+    <td class="code">${t.token}</td>
+    <td>${t.label}</td>
+  </tr>`).join('');
+}
+
+function generateToken() {
+  const label = document.getElementById('tokenLabel').value.trim();
+  if (!label) return;
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true;
+  btn.textContent = '生成中...';
+  document.getElementById('tokenError').style.display = 'none';
+
+  fetch('/api/tokens', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({label}) })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        document.getElementById('tokenError').textContent = data.error;
+        document.getElementById('tokenError').style.display = 'block';
+        return;
+      }
+      const result = document.getElementById('tokenResult');
+      result.style.display = 'block';
+      document.getElementById('tokenKey').textContent = data.token;
+      document.getElementById('tokenLabel').value = '';
+      // Refresh token list immediately
+      fetchJSON('/api/tokens').then(t => {
+        if (t) document.getElementById('tokenList').innerHTML = renderTokens(t);
+      });
+    })
+    .catch(err => {
+      document.getElementById('tokenError').textContent = 'Failed to generate token';
+      document.getElementById('tokenError').style.display = 'block';
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = '生成';
+    });
+}
+
+function copyToken() {
+  const key = document.getElementById('tokenKey').textContent;
+  navigator.clipboard.writeText(key);
+  const btn = document.querySelector('.token-copy');
+  btn.textContent = '已复制!';
+  setTimeout(() => { btn.textContent = '复制'; }, 2000);
+}
+
 async function refresh() {
   const status = await fetchJSON('/api/status');
   if (status) {
@@ -151,15 +236,17 @@ async function refresh() {
     document.getElementById('statRecv').textContent = fmtBytes(status.bytes_received||0);
   }
 
-  const [clients, tunnels, requests] = await Promise.all([
+  const [clients, tunnels, requests, tokens] = await Promise.all([
     fetchJSON('/api/clients'),
     fetchJSON('/api/tunnels'),
     fetchJSON('/api/requests?limit=30'),
+    fetchJSON('/api/tokens'),
   ]);
 
   if (clients) document.getElementById('clientList').innerHTML = renderClients(clients);
   if (tunnels) document.getElementById('tunnelList').innerHTML = renderTunnels(tunnels);
   if (requests) document.getElementById('requestLog').innerHTML = renderRequests(requests);
+  if (tokens) document.getElementById('tokenList').innerHTML = renderTokens(tokens);
 }
 
 refresh();
