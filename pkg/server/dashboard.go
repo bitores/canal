@@ -28,14 +28,18 @@ type DashboardServer struct {
 	metrics      *MetricsCollector
 	httpSrv      *http.Server
 	authRequired bool
+	certFile     string
+	keyFile      string
 }
 
-func NewDashboardServer(addr string, srv *Server) *DashboardServer {
+func NewDashboardServer(addr string, srv *Server, certFile, keyFile string) *DashboardServer {
 	return &DashboardServer{
 		addr:         addr,
 		server:       srv,
 		metrics:      srv.metrics,
 		authRequired: srv.config.UserFile != "",
+		certFile:     certFile,
+		keyFile:      keyFile,
 	}
 }
 
@@ -72,7 +76,13 @@ func (d *DashboardServer) Start() error {
 
 	slog.Info("dashboard starting", "addr", d.addr)
 	go func() {
-		if err := d.httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if d.certFile != "" && d.keyFile != "" {
+			err = d.httpSrv.ListenAndServeTLS(d.certFile, d.keyFile)
+		} else {
+			err = d.httpSrv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			slog.Error("dashboard error", "error", err)
 		}
 	}()

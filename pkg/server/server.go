@@ -107,7 +107,7 @@ func (s *Server) Start() error {
 	}
 
 	if s.config.DashboardAddr != "" {
-		s.dashboard = NewDashboardServer(s.config.DashboardAddr, s)
+		s.dashboard = NewDashboardServer(s.config.DashboardAddr, s, s.config.TLSCertFile, s.config.TLSKeyFile)
 		if err := s.dashboard.Start(); err != nil {
 			return err
 		}
@@ -121,7 +121,14 @@ func (s *Server) Start() error {
 		}
 		slog.Info("subdomain proxy starting", "addr", s.config.ProxyAddr)
 		go func() {
-			if err := s.proxyServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			var err error
+			if s.config.TLSCertFile != "" && s.config.TLSKeyFile != "" {
+				slog.Info("subdomain proxy TLS enabled")
+				err = s.proxyServer.ListenAndServeTLS(s.config.TLSCertFile, s.config.TLSKeyFile)
+			} else {
+				err = s.proxyServer.ListenAndServe()
+			}
+			if err != nil && err != http.ErrServerClosed {
 				slog.Error("subdomain proxy error", "error", err)
 			}
 		}()
