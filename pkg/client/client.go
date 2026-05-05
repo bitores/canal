@@ -143,6 +143,9 @@ func (c *Client) register() error {
 			slog.Warn("tunnel error", "id", t.ID, "error", t.Error)
 		} else {
 			slog.Info("tunnel active", "id", t.ID, "url", t.PublicURL)
+			if t.SubdomainURL != "" {
+				slog.Info("tunnel subdomain", "id", t.ID, "url", t.SubdomainURL)
+			}
 		}
 	}
 
@@ -173,7 +176,7 @@ func (c *Client) readLoop() {
 			// heartbeat acknowledged
 
 		case protocol.MsgTypeHTTPRequest:
-			c.handleHTTPRequest(&msg)
+			go c.handleHTTPRequest(&msg)
 
 		case protocol.MsgTypeTunnelOpen:
 			c.handleTunnelOpen(&msg)
@@ -207,7 +210,7 @@ func (c *Client) handleHTTPRequest(msg *protocol.Message) {
 		return
 	}
 
-	tunnel.HandleHTTPRequest(c.conn, msg, localAddr)
+	tunnel.HandleHTTPRequest(&lockedConn{conn: c.conn, mu: &c.writeMu}, msg, localAddr)
 }
 
 func (c *Client) getLocalAddr(tunnelID string) string {
@@ -399,6 +402,22 @@ func (c *Client) reconnect() {
 func mustMarshalClient(v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
+}
+
+// lockedConn wraps a WebSocket connection with a mutex for concurrent writes.
+type lockedConn struct {
+	conn *websocket.Conn
+	mu   sync.Locker
+}
+
+func (l *lockedConn) WriteMessage(msgType int, data []byte) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.conn.WriteMessage(msgType, data)
+}
+
+func (l *lockedConn) Close() error {
+	return l.conn.Close()
 }
 
 type dataPayload struct {

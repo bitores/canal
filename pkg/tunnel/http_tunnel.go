@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"canal/pkg/protocol"
 )
@@ -33,7 +34,7 @@ func HandleHTTPRequest(conn WriteCloser, msg *protocol.Message, localAddr string
 		localReq.Header.Set(k, v)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	localResp, err := client.Do(localReq)
 	if err != nil {
 		slog.Error("failed to reach local service", "error", err)

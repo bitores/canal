@@ -11,8 +11,6 @@ import (
 
 	"canal/pkg/auth"
 	"canal/pkg/protocol"
-
-	"github.com/google/uuid"
 )
 
 type TunnelBinding struct {
@@ -23,6 +21,7 @@ type TunnelBinding struct {
 	LocalAddr  string
 	Listener   net.Listener
 	BasicAuth  *protocol.BasicAuthConfig
+	Subdomain  string
 }
 
 type PublicListenerManager struct {
@@ -102,16 +101,10 @@ func (m *PublicListenerManager) handleHTTPConn(conn net.Conn, binding *TunnelBin
 	defer func() { _ = conn.Close() }()
 	start := time.Now()
 
-	client, ok := m.server.clients.Get(binding.ClientID)
-	if !ok {
-		slog.Warn("client not found for tunnel", "tunnel_id", binding.TunnelID)
-		return
-	}
-
 	br := bufio.NewReaderSize(newReadWriteCloser(conn), 1<<20)
 	req, err := http.ReadRequest(br)
 	if err != nil {
-		slog.Debug("failed to read HTTP request", "error", err)
+		slog.Warn("failed to read HTTP request", "error", err)
 		return
 	}
 	defer func() { _ = req.Body.Close() }()
@@ -151,52 +144,28 @@ func (m *PublicListenerManager) handleHTTPConn(conn net.Conn, binding *TunnelBin
 		Body:    body,
 	}
 
-	streamID := uuid.New().String()
-	payloadBytes := mustMarshal(reqPayload)
-
-	msg := protocol.Message{
-		Type:     protocol.MsgTypeHTTPRequest,
-		StreamID: streamID,
-		TunnelID: binding.TunnelID,
-		Payload:  payloadBytes,
-	}
-
-	if err := client.Send(&msg); err != nil {
-		slog.Error("failed to send HTTP request to client", "error", err)
-		return
-	}
-
-	respChan := make(chan *protocol.Message, 1)
-	m.server.pendingRespMu.Lock()
-	m.server.pendingResponses[streamID] = respChan
-	m.server.pendingRespMu.Unlock()
-
-	defer func() {
-		m.server.pendingRespMu.Lock()
-		delete(m.server.pendingResponses, streamID)
-		m.server.pendingRespMu.Unlock()
-	}()
+	streamID, respMsg, err := m.server.sendHTTPRequest(binding, &reqPayload)
 
 	var statusCode int
 	var respBytes int64
 
-	select {
-	case respMsg := <-respChan:
+	if err != nil {
+		slog.Warn("HTTP request failed",
+			"tunnel_id", binding.TunnelID,
+			"error", err)
+		writeHTTPResponse(conn, 504, "Gateway Timeout", nil, nil)
+		statusCode = 504
+	} else {
 		var respPayload protocol.HTTPResponsePayload
 		if err := jsonUnmarshal(respMsg.Payload, &respPayload); err != nil {
 			slog.Error("failed to unmarshal HTTP response", "error", err)
 			writeHTTPResponse(conn, 502, "Bad Gateway", nil, nil)
 			statusCode = 502
-			break
+		} else {
+			statusCode = respPayload.StatusCode
+			respBytes = int64(len(respPayload.Body))
+			writeHTTPResponse(conn, respPayload.StatusCode, respPayload.StatusText, respPayload.Headers, respPayload.Body)
 		}
-
-		statusCode = respPayload.StatusCode
-		respBytes = int64(len(respPayload.Body))
-		writeHTTPResponse(conn, respPayload.StatusCode, respPayload.StatusText, respPayload.Headers, respPayload.Body)
-
-	case <-m.server.stopCh:
-		writeHTTPResponse(conn, 504, "Gateway Timeout", nil, nil)
-		statusCode = 504
 	}
 
 	reqBytes := int64(len(body))

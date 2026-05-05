@@ -9,6 +9,10 @@ type ServerConfig struct {
 	DashboardAddr string `yaml:"dashboard_addr"`
 	HTTPPortRange string `yaml:"http_port_range"`
 	TCPPortRange  string `yaml:"tcp_port_range"`
+	ProxyAddr     string `yaml:"proxy_addr"`
+	UserFile      string `yaml:"user_file"`
+	AdminUser     string `yaml:"admin_user"`
+	AdminPass     string `yaml:"admin_pass"`
 }
 
 type ClientConfig struct {
@@ -31,7 +35,8 @@ func DefaultServerConfig() *ServerConfig {
 		PublicHost:    "localhost",
 		DashboardAddr: ":8080",
 		HTTPPortRange: "18080-18180",
-		TCPPortRange: "19000-19100",
+		TCPPortRange:  "19000-19100",
+		ProxyAddr:     ":8081",
 	}
 }
 

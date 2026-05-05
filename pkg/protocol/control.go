@@ -26,9 +26,10 @@ type RegisterAckPayload struct {
 }
 
 type TunnelAssign struct {
-	ID        string `json:"id"`
-	PublicURL string `json:"public_url"`
-	Error     string `json:"error,omitempty"`
+	ID           string `json:"id"`
+	PublicURL    string `json:"public_url"`
+	SubdomainURL string `json:"subdomain_url,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 type HTTPRequestPayload struct {

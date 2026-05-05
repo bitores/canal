@@ -31,6 +31,10 @@ func main() {
 	tlsKey := flag.String("tls-key", "", "TLS private key file")
 	dashboardAddr := flag.String("dashboard-addr", ":8080", "dashboard listen address")
 	tokenFile := flag.String("token-file", "", "token authentication file (YAML)")
+	proxyAddr := flag.String("proxy-addr", ":8081", "subdomain proxy listen address (empty to disable)")
+	userFile := flag.String("user-file", "", "user accounts file path (enables dashboard auth)")
+	adminUser := flag.String("admin-user", "", "admin user email")
+	adminPass := flag.String("admin-pass", "", "admin user password")
 	flag.Parse()
 
 	cfg := config.DefaultServerConfig()
@@ -54,6 +58,18 @@ func main() {
 	}
 	if *dashboardAddr != ":8080" {
 		cfg.DashboardAddr = *dashboardAddr
+	}
+	if *proxyAddr != ":8081" {
+		cfg.ProxyAddr = *proxyAddr
+	}
+	if *userFile != "" {
+		cfg.UserFile = *userFile
+	}
+	if *adminUser != "" {
+		cfg.AdminUser = *adminUser
+	}
+	if *adminPass != "" {
+		cfg.AdminPass = *adminPass
 	}
 
 	srv, err := server.NewServer(cfg)

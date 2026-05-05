@@ -1,9 +1,10 @@
 # canal server config
 listen_addr: ":7000"
-public_host: "localhost"
+public_host: "your-server.com"   # 改为你的域名，子域名模式需要泛解析 *.your-server.com
 tls_cert_file: ""
 tls_key_file: ""
 token_file: "/etc/canal/tokens.yaml"
 dashboard_addr: ":8080"
 http_port_range: "18080-18180"
 tcp_port_range: "19000-19100"
+proxy_addr: ":8081"              # 子域名代理端口（设为 "" 禁用）

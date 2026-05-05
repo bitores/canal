@@ -1,0 +1,14 @@
+users:
+    admin@canal.com:
+        email: admin@canal.com
+        password_hash: $2a$10$3cid7neAHHiYKPfH4aUK6efeCIef/.nY.dSk6AvXQHLMCTkO.cl1K
+        tokens: []
+        created_at: "2026-05-05T13:04:13+08:00"
+        is_admin: true
+    test@example.com:
+        email: test@example.com
+        password_hash: $2a$10$U5LGSZybVwABFd7ps.iur.jW1iSIE/ddqqsYpcCa/aWnmfFm/HQZO
+        tokens:
+            - sk_3c2b18fb8259e5022b6af972ec547d02
+        created_at: "2026-05-05T12:46:27+08:00"
+        is_admin: false

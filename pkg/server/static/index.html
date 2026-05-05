@@ -1,17 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>canal Dashboard</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
 .header { background: #1e293b; padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 16px; }
 .header h1 { font-size: 20px; font-weight: 600; }
 .header .status { margin-left: auto; display: flex; gap: 24px; font-size: 13px; }
 .header .status span { color: #94a3b8; }
 .header .status strong { color: #22c55e; }
+.header .user-info { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 13px; color: #94a3b8; }
+.header .user-info .logout-btn { background: none; border: 1px solid #475569; border-radius: 4px; padding: 4px 10px; color: #94a3b8; font-size: 12px; cursor: pointer; }
+.header .user-info .logout-btn:hover { background: #334155; color: #e2e8f0; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 20px 24px; }
 .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; }
 .stat-card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -53,16 +56,73 @@ td.delete { color: #ef4444; }
 a { color: #38bdf8; text-decoration: none; }
 a:hover { text-decoration: underline; }
 .error { color: #ef4444; }
+.btn-danger { background: none; border: 1px solid #ef4444; border-radius: 4px; padding: 2px 8px; color: #ef4444; font-size: 12px; cursor: pointer; }
+.btn-danger:hover { background: #ef4444; color: #fff; }
 @media (max-width: 900px) { .content { grid-template-columns: 1fr; } }
+
+/* Auth pages */
+.auth-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 24px; }
+.auth-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; width: 100%; max-width: 400px; }
+.auth-box h2 { font-size: 22px; font-weight: 700; margin-bottom: 4px; color: #f1f5f9; }
+.auth-box .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+.auth-box label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+.auth-box input[type="email"], .auth-box input[type="password"] { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; outline: none; margin-bottom: 16px; }
+.auth-box input:focus { border-color: #38bdf8; }
+.auth-box .auth-btn { width: 100%; background: #38bdf8; border: none; border-radius: 6px; padding: 10px; color: #0f172a; font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 4px; }
+.auth-box .auth-btn:hover { background: #7dd3fc; }
+.auth-box .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-box .auth-error { color: #ef4444; font-size: 13px; margin-bottom: 12px; display: none; }
+.auth-box .auth-link { text-align: center; margin-top: 16px; font-size: 13px; color: #64748b; }
+.auth-box .auth-link a { color: #38bdf8; cursor: pointer; }
+.auth-box .auth-link a:hover { text-decoration: underline; }
+.hidden { display: none !important; }
 </style>
 </head>
 <body>
+<!-- Auth pages -->
+<div id="loginPage" class="auth-page">
+  <div class="auth-box">
+    <h2>登录</h2>
+    <div class="subtitle">登录到 canal Dashboard</div>
+    <div id="loginError" class="auth-error"></div>
+    <label for="loginEmail">邮箱</label>
+    <input type="email" id="loginEmail" placeholder="your@email.com" />
+    <label for="loginPassword">密码</label>
+    <input type="password" id="loginPassword" placeholder="&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;" />
+    <button id="loginBtn" class="auth-btn" onclick="doLogin()">登录</button>
+    <div class="auth-link">没有账号？<a onclick="showRegister()">注册</a></div>
+  </div>
+</div>
+
+<div id="registerPage" class="auth-page hidden">
+  <div class="auth-box">
+    <h2>注册</h2>
+    <div class="subtitle">创建 canal 账号</div>
+    <div id="registerError" class="auth-error"></div>
+    <label for="regEmail">邮箱</label>
+    <input type="email" id="regEmail" placeholder="your@email.com" />
+    <label for="regPassword">密码</label>
+    <input type="password" id="regPassword" placeholder="至少 6 位" />
+    <label for="regConfirm">确认密码</label>
+    <input type="password" id="regConfirm" placeholder="再次输入密码" />
+    <button id="registerBtn" class="auth-btn" onclick="doRegister()">注册</button>
+    <div class="auth-link">已有账号？<a onclick="showLogin()">登录</a></div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboardPage" class="hidden">
 <div class="header">
   <h1>🔌 canal</h1>
   <div class="status">
     <span>Uptime: <strong id="uptime">-</strong></span>
     <span>Clients: <strong id="clientCount">0</strong></span>
     <span>Data: <strong id="dataVol">0 B</strong></span>
+  </div>
+  <div class="user-info">
+    <span id="adminBadge" style="color:#fbbf24;font-size:13px;font-weight:600;" class="hidden">👑 Admin</span>
+    <span id="userEmail"></span>
+    <button class="logout-btn" onclick="doLogout()">退出</button>
   </div>
 </div>
 
@@ -75,7 +135,7 @@ a:hover { text-decoration: underline; }
   <div class="stat-card"><div class="label">Bytes Received</div><div class="value" id="statRecv">0 B</div></div>
 </div>
 
-<div class="token-section">
+<div class="token-section" id="tokenSection">
   <div class="token-box">
     <h3>Token 管理</h3>
     <div class="token-form">
@@ -91,6 +151,13 @@ a:hover { text-decoration: underline; }
     </div>
     <div id="tokenError" class="token-error" style="display:none"></div>
     <table><thead><tr><th>Token</th><th>Label</th></tr></thead><tbody id="tokenList"><tr><td colspan="2" class="empty">加载中...</td></tr></tbody></table>
+  </div>
+</div>
+
+<div id="adminSection" class="hidden" style="padding:0 24px 24px">
+  <div class="section full">
+    <h2>👑 用户管理</h2>
+    <table><thead><tr><th>邮箱</th><th>Token 数</th><th>注册时间</th><th>角色</th><th>操作</th></tr></thead><tbody id="userList"><tr><td colspan="5" class="empty">加载中...</td></tr></tbody></table>
   </div>
 </div>
 
@@ -110,13 +177,155 @@ a:hover { text-decoration: underline; }
     </tr></thead><tbody id="requestLog"><tr><td colspan="6" class="empty">Waiting for requests...</td></tr></tbody></table>
   </div>
 </div>
+</div>
 
 <script>
+// ====== Auth State ======
+let isAdmin = false;
+function getSessionToken() { return localStorage.getItem('session_token'); }
+function setSessionToken(t) { localStorage.setItem('session_token', t); }
+function clearSession() { localStorage.removeItem('session_token'); isAdmin = false; }
+
+// ====== Auth API helper ======
+async function authFetch(url, options) {
+  const opts = options || {};
+  opts.headers = opts.headers || {};
+  const token = getSessionToken();
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  try {
+    const r = await fetch(url, opts);
+    if (r.status === 401) {
+      clearSession();
+      showPage('login');
+      return null;
+    }
+    return r;
+  } catch { return null; }
+}
+
+async function authFetchJSON(url, options) {
+  const r = await authFetch(url, options);
+  if (!r) return null;
+  try { return await r.json(); } catch { return null; }
+}
+
+// ====== Page Navigation ======
+function showPage(page) {
+  document.getElementById('loginPage').classList.add('hidden');
+  document.getElementById('registerPage').classList.add('hidden');
+  document.getElementById('dashboardPage').classList.add('hidden');
+  if (page === 'login') document.getElementById('loginPage').classList.remove('hidden');
+  else if (page === 'register') document.getElementById('registerPage').classList.remove('hidden');
+  else if (page === 'dashboard') document.getElementById('dashboardPage').classList.remove('hidden');
+}
+
+function showLogin() { showPage('login'); }
+function showRegister() { showPage('register'); }
+
+// ====== Auth Actions ======
+async function checkSession() {
+  const token = getSessionToken();
+  if (!token) { showPage('login'); return; }
+
+  const r = await fetch('/api/session/check', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (!r) { showPage('login'); return; }
+  const data = await r.json();
+  if (data && data.authenticated) {
+    document.getElementById('userEmail').textContent = data.email || '';
+    isAdmin = data.is_admin || false;
+    if (isAdmin) {
+      document.getElementById('adminBadge').classList.remove('hidden');
+      document.getElementById('adminSection').classList.remove('hidden');
+    } else {
+      document.getElementById('adminBadge').classList.add('hidden');
+      document.getElementById('adminSection').classList.add('hidden');
+    }
+    showPage('dashboard');
+    refresh();
+    return;
+  }
+  clearSession();
+  showPage('login');
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) { showAuthError('login', '请输入邮箱和密码'); return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = '登录中...';
+  hideAuthError('login');
+
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await r.json();
+    if (data.error) { showAuthError('login', data.error); return; }
+    setSessionToken(data.session_token);
+    document.getElementById('userEmail').textContent = data.email;
+    showPage('dashboard');
+    refresh();
+  } catch (e) {
+    showAuthError('login', '网络错误');
+  } finally {
+    btn.disabled = false; btn.textContent = '登录';
+  }
+}
+
+async function doRegister() {
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const confirm = document.getElementById('regConfirm').value;
+  if (!email || !password) { showAuthError('register', '请输入邮箱和密码'); return; }
+  if (password.length < 6) { showAuthError('register', '密码至少 6 位'); return; }
+  if (password !== confirm) { showAuthError('register', '两次密码不一致'); return; }
+
+  const btn = document.getElementById('registerBtn');
+  btn.disabled = true; btn.textContent = '注册中...';
+  hideAuthError('register');
+
+  try {
+    const r = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await r.json();
+    if (data.error) { showAuthError('register', data.error); return; }
+    document.getElementById('loginEmail').value = email;
+    showLogin();
+  } catch (e) {
+    showAuthError('register', '网络错误');
+  } finally {
+    btn.disabled = false; btn.textContent = '注册';
+  }
+}
+
+function doLogout() {
+  authFetch('/api/logout', { method: 'POST' });
+  clearSession();
+  showPage('login');
+}
+
+function showAuthError(page, msg) {
+  document.getElementById(page + 'Error').textContent = msg;
+  document.getElementById(page + 'Error').style.display = 'block';
+}
+function hideAuthError(page) {
+  document.getElementById(page + 'Error').style.display = 'none';
+}
+
+// ====== Dashboard ======
 function fmtBytes(b) {
   if (!b) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
-  let i = 0;
-  let v = b;
+  let i = 0, v = b;
   while (v >= 1024 && i < units.length-1) { v /= 1024; i++; }
   return v.toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
 }
@@ -129,7 +338,8 @@ function fmtDur(ms) {
 
 async function fetchJSON(url) {
   try {
-    const r = await fetch(url);
+    const r = await authFetch(url);
+    if (!r) return null;
     return await r.json();
   } catch { return null; }
 }
@@ -138,7 +348,7 @@ function renderClients(clients) {
   if (!clients || !clients.length) return '<div class="empty">No clients connected</div>';
   return '<table><thead><tr><th>ID</th><th>Label</th><th>Tunnels</th><th>Status</th></tr></thead><tbody>' +
     clients.map(c => `<tr>
-      <td class="code">${c.id.slice(0,8)}</td>
+      <td class="code">${(c.id||'').slice(0,8)}</td>
       <td>${c.token_label || '-'}</td>
       <td>${(c.tunnels||[]).length}</td>
       <td><span class="badge online">online</span></td>
@@ -147,11 +357,12 @@ function renderClients(clients) {
 
 function renderTunnels(tunnels) {
   if (!tunnels || !tunnels.length) return '<div class="empty">No tunnels active</div>';
-  return '<table><thead><tr><th>ID</th><th>Type</th><th>Public URL</th><th>Local</th></tr></thead><tbody>' +
+  return '<table><thead><tr><th>ID</th><th>Type</th><th>Public URL</th><th>Subdomain URL</th><th>Local</th></tr></thead><tbody>' +
     tunnels.map(t => `<tr>
       <td class="code">${t.tunnel_id}</td>
       <td><span class="badge ${t.type}">${t.type}</span></td>
       <td><a href="${t.public_url}" target="_blank">${t.public_url}</a></td>
+      <td>${t.subdomain_url ? `<a href="${t.subdomain_url}" target="_blank">${t.subdomain_url}</a>` : '-'}</td>
       <td class="code">${t.local_addr}</td>
     </tr>`).join('') + '</tbody></table>';
 }
@@ -179,39 +390,32 @@ function renderTokens(tokens) {
   </tr>`).join('');
 }
 
-function generateToken() {
+async function generateToken() {
   const label = document.getElementById('tokenLabel').value.trim();
-  if (!label) return;
   const btn = document.getElementById('genBtn');
-  btn.disabled = true;
-  btn.textContent = '生成中...';
+  btn.disabled = true; btn.textContent = '生成中...';
   document.getElementById('tokenError').style.display = 'none';
 
-  fetch('/api/tokens', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({label}) })
-    .then(r => r.json())
-    .then(data => {
-      if (data.error) {
-        document.getElementById('tokenError').textContent = data.error;
-        document.getElementById('tokenError').style.display = 'block';
-        return;
-      }
-      const result = document.getElementById('tokenResult');
-      result.style.display = 'block';
-      document.getElementById('tokenKey').textContent = data.token;
-      document.getElementById('tokenLabel').value = '';
-      // Refresh token list immediately
-      fetchJSON('/api/tokens').then(t => {
-        if (t) document.getElementById('tokenList').innerHTML = renderTokens(t);
-      });
-    })
-    .catch(err => {
-      document.getElementById('tokenError').textContent = 'Failed to generate token';
-      document.getElementById('tokenError').style.display = 'block';
-    })
-    .finally(() => {
-      btn.disabled = false;
-      btn.textContent = '生成';
-    });
+  const r = await authFetchJSON('/api/tokens', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label })
+  });
+  if (!r) return;
+
+  if (r.error) {
+    document.getElementById('tokenError').textContent = r.error;
+    document.getElementById('tokenError').style.display = 'block';
+  } else {
+    const result = document.getElementById('tokenResult');
+    result.style.display = 'block';
+    document.getElementById('tokenKey').textContent = r.token;
+    document.getElementById('tokenLabel').value = '';
+    // Refresh token list
+    const tokens = await fetchJSON('/api/tokens');
+    if (tokens) document.getElementById('tokenList').innerHTML = renderTokens(tokens);
+  }
+  btn.disabled = false; btn.textContent = '生成';
 }
 
 function copyToken() {
@@ -220,6 +424,28 @@ function copyToken() {
   const btn = document.querySelector('.token-copy');
   btn.textContent = '已复制!';
   setTimeout(() => { btn.textContent = '复制'; }, 2000);
+}
+
+function renderUsers(users) {
+  if (!users || !users.length) return '<tr><td colspan="5" class="empty">No users</td></tr>';
+  return users.map(u => {
+    const isAdminUser = u.is_admin ? '<span style="color:#fbbf24">Yes</span>' : '-';
+    const delBtn = u.is_admin ? '-' : `<button class="btn-danger" onclick="deleteUser('${u.email}')">删除</button>`;
+    return `<tr>
+      <td class="code">${u.email}</td>
+      <td>${(u.tokens||[]).length}</td>
+      <td class="time">${(u.created_at||'').slice(0,10)}</td>
+      <td>${isAdminUser}</td>
+      <td>${delBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function deleteUser(email) {
+  if (!confirm('确定删除用户 ' + email + ' 吗？')) return;
+  const r = await authFetchJSON('/api/admin/users/' + encodeURIComponent(email), { method: 'DELETE' });
+  if (r && r.error) { alert(r.error); return; }
+  refresh();
 }
 
 async function refresh() {
@@ -236,21 +462,37 @@ async function refresh() {
     document.getElementById('statRecv').textContent = fmtBytes(status.bytes_received||0);
   }
 
-  const [clients, tunnels, requests, tokens] = await Promise.all([
+  const promises = [
     fetchJSON('/api/clients'),
     fetchJSON('/api/tunnels'),
     fetchJSON('/api/requests?limit=30'),
     fetchJSON('/api/tokens'),
-  ]);
+  ];
+  if (isAdmin) promises.push(fetchJSON('/api/admin/users'));
+  const [clients, tunnels, requests, tokens, users] = await Promise.all(promises);
 
   if (clients) document.getElementById('clientList').innerHTML = renderClients(clients);
   if (tunnels) document.getElementById('tunnelList').innerHTML = renderTunnels(tunnels);
   if (requests) document.getElementById('requestLog').innerHTML = renderRequests(requests);
   if (tokens) document.getElementById('tokenList').innerHTML = renderTokens(tokens);
+  if (isAdmin && users) document.getElementById('userList').innerHTML = renderUsers(users);
 }
 
-refresh();
-setInterval(refresh, 2000);
+// ====== Init ======
+// Enter key to submit on login/register
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    if (!document.getElementById('loginPage').classList.contains('hidden')) doLogin();
+    else if (!document.getElementById('registerPage').classList.contains('hidden')) doRegister();
+  }
+});
+
+checkSession();
+setInterval(async () => {
+  if (!document.getElementById('dashboardPage').classList.contains('hidden')) {
+    refresh();
+  }
+}, 2000);
 </script>
 </body>
 </html>

@@ -66,6 +66,8 @@ go build -o canal-client ./cmd/client
 | `--tls-key` | `""` | TLS 私钥路径 |
 | `--token-file` | `""` | Token 认证文件路径 |
 | `--config` | `""` | 配置文件路径 |
+| `--proxy-addr` | `:8081` | 子域代理监听地址（设为 "" 可禁用） |
+| `--dashboard-addr` | `:8080` | Dashboard 监听地址 |
 
 ### 4. 启动客户端
 
@@ -110,6 +112,24 @@ INFO tunnel active id=web url=http://your-server.com:18080
 ```
 
 浏览器访问 `http://your-server.com:18080` 即可访问内网的 `localhost:3000` 服务。
+
+#### 子域名模式（三级域名）
+
+除端口模式外，canal 还支持类似 ngrok 的子域名模式。需要在服务端配置 `--proxy-addr`（默认 `:8081`）：
+
+```
+# 服务端自动分配随机子域名
+INFO subdomain assigned tunnel_id=tun-1 subdomain=tun-a1b2c3 url=http://tun-a1b2c3.your-server.com:8081
+```
+
+通过 `http://tun-a1b2c3.your-server.com:8081` 即可访问内网服务。
+
+> **注意**：子域名模式需要配置 DNS 泛解析（`*.your-server.com` 指向服务端 IP）才能正常工作。
+> 本地测试可使用 `--host localhost` + 端口模式，或修改 hosts 文件。
+
+#### 自定义子域名
+
+客户端可通过 `request_host` 字段在配置文件中指定自定义子域名（替代随机生成）：
 
 ### 6. 配置 Token 认证（可选）
 
@@ -178,6 +198,7 @@ token_file: "/etc/canal/tokens.yaml"
 dashboard_addr: ":8080"
 http_port_range: "18080-18180"
 tcp_port_range: "19000-19100"
+proxy_addr: ":8081"           # 子域名代理地址（设为空则禁用）
 ```
 
 ### 令牌文件
@@ -207,6 +228,7 @@ tunnels:
   - id: "api"
     type: "http"
     local_addr: "localhost:8080"
+    request_host: "myapi"
     basic_auth:
       username: "admin"
       password: "secret123"

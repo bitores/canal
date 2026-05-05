@@ -1,4 +1,4 @@
-# Token authentication file
-# Generate tokens: openssl rand -hex 24
 tokens:
-  sk_example_token_123: "my-client"
+    sk_0d31796de50eb92b35b2a9cddcd1bcba: dasfadfasdfas
+    sk_3c2b18fb8259e5022b6af972ec547d02: test@example.com
+    sk_example_token_123: my-client

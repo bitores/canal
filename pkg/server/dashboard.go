@@ -9,35 +9,54 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+
+	"canal/pkg/auth"
 )
 
 //go:embed static/*
 var dashboardStatic embed.FS
 
+type contextKey string
+
+const ctxKeyEmail contextKey = "email"
+
 type DashboardServer struct {
-	addr    string
-	server  *Server
-	metrics *MetricsCollector
-	httpSrv *http.Server
+	addr         string
+	server       *Server
+	metrics      *MetricsCollector
+	httpSrv      *http.Server
+	authRequired bool
 }
 
 func NewDashboardServer(addr string, srv *Server) *DashboardServer {
 	return &DashboardServer{
-		addr:    addr,
-		server:  srv,
-		metrics: srv.metrics,
+		addr:         addr,
+		server:       srv,
+		metrics:      srv.metrics,
+		authRequired: srv.config.UserFile != "",
 	}
 }
 
 func (d *DashboardServer) Start() error {
 	mux := http.NewServeMux()
+
+	// Public routes (no auth required)
+	mux.HandleFunc("/api/register", d.handleRegister)
+	mux.HandleFunc("/api/login", d.handleLogin)
+	mux.HandleFunc("/api/session/check", d.handleSessionCheck)
+
+	// Protected routes
 	mux.HandleFunc("/api/status", d.handleStatus)
 	mux.HandleFunc("/api/clients", d.handleClients)
 	mux.HandleFunc("/api/tunnels", d.handleTunnels)
 	mux.HandleFunc("/api/requests", d.handleRequests)
 	mux.HandleFunc("/api/metrics", d.handleMetrics)
 	mux.HandleFunc("/api/tokens", d.handleTokens)
+	mux.HandleFunc("/api/logout", d.handleLogout)
+	mux.HandleFunc("/api/admin/users", d.handleAdminUsers)
+	mux.HandleFunc("/api/admin/users/", d.handleAdminDeleteUser)
 
 	staticFS, err := fs.Sub(dashboardStatic, "static")
 	if err != nil {
@@ -48,7 +67,7 @@ func (d *DashboardServer) Start() error {
 
 	d.httpSrv = &http.Server{
 		Addr:    d.addr,
-		Handler: mux,
+		Handler: d.authMiddleware(mux),
 	}
 
 	slog.Info("dashboard starting", "addr", d.addr)
@@ -58,6 +77,40 @@ func (d *DashboardServer) Start() error {
 		}
 	}()
 	return nil
+}
+
+func (d *DashboardServer) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// Public routes and static files: skip auth
+		if path == "/api/register" || path == "/api/login" || path == "/api/session/check" || !strings.HasPrefix(path, "/api") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// If auth not required, allow all
+		if !d.authRequired {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Extract and validate Bearer token
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") {
+			writeJSON(w, map[string]string{"error": "unauthorized"})
+			return
+		}
+		token := auth[7:]
+		email, ok := d.server.sessionStore.Validate(token)
+		if !ok {
+			writeJSON(w, map[string]string{"error": "unauthorized"})
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), ctxKeyEmail, email)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (d *DashboardServer) Stop() error {
@@ -119,15 +172,22 @@ func (d *DashboardServer) handleTunnels(w http.ResponseWriter, r *http.Request) 
 			if tb.Type == "tcp" {
 				scheme = "tcp"
 			}
-			result = append(result, map[string]any{
-				"tunnel_id":  tb.TunnelID,
-				"client_id":  tb.ClientID,
-				"type":       tb.Type,
-				"local_addr": tb.LocalAddr,
-				"public_url": fmt.Sprintf("%s://%s:%d", scheme, d.server.config.PublicHost, tb.PublicPort),
-				"port":       tb.PublicPort,
-				"has_auth":   tb.BasicAuth != nil,
-			})
+			entry := map[string]any{
+				"tunnel_id":    tb.TunnelID,
+				"client_id":    tb.ClientID,
+				"type":         tb.Type,
+				"local_addr":   tb.LocalAddr,
+				"public_url":   fmt.Sprintf("%s://%s:%d", scheme, d.server.config.PublicHost, tb.PublicPort),
+				"port":         tb.PublicPort,
+				"has_auth":     tb.BasicAuth != nil,
+			}
+			if tb.Subdomain != "" && d.server.config.ProxyAddr != "" {
+				entry["subdomain_url"] = formatSubdomainURL(
+					d.server.config.PublicHost,
+					proxyPortFromAddr(d.server.config.ProxyAddr),
+					tb.Subdomain, scheme)
+			}
+			result = append(result, entry)
 		}
 	}
 	writeJSON(w, result)
@@ -158,36 +218,243 @@ func (d *DashboardServer) handleMetrics(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, resp)
 }
 
+func (d *DashboardServer) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, 405)
+		return
+	}
+	if !d.authRequired {
+		writeJSON(w, map[string]string{"error": "user authentication is not configured on server"})
+		return
+	}
+
+	var req struct {
+		Email           string `json:"email"`
+		Password        string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.Email == "" || req.Password == "" {
+		writeJSON(w, map[string]string{"error": "email and password are required"})
+		return
+	}
+	if len(req.Password) < 6 {
+		writeJSON(w, map[string]string{"error": "password must be at least 6 characters"})
+		return
+	}
+
+	if err := d.server.userStore.CreateUser(req.Email, req.Password); err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+
+	slog.Info("user registered", "email", req.Email)
+	writeJSON(w, map[string]string{"message": "user created successfully"})
+}
+
+func (d *DashboardServer) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, 405)
+		return
+	}
+
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if d.authRequired {
+		if !d.server.userStore.ValidatePassword(req.Email, req.Password) {
+			writeJSON(w, map[string]string{"error": "invalid email or password"})
+			return
+		}
+	} else {
+		// No auth configured: allow any login for development
+		if req.Email == "" {
+			writeJSON(w, map[string]string{"error": "email is required"})
+			return
+		}
+	}
+
+	sessionToken := d.server.sessionStore.Create(req.Email)
+	slog.Info("user logged in", "email", req.Email)
+	writeJSON(w, map[string]string{"session_token": sessionToken, "email": req.Email})
+}
+
+func (d *DashboardServer) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, `{"error":"method not allowed"}`, 405)
+		return
+	}
+	if !d.authRequired {
+		writeJSON(w, map[string]string{"message": "ok"})
+		return
+	}
+
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		d.server.sessionStore.Revoke(auth[7:])
+	}
+	writeJSON(w, map[string]string{"message": "logged out"})
+}
+
+func (d *DashboardServer) handleSessionCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, `{"error":"method not allowed"}`, 405)
+		return
+	}
+
+	if !d.authRequired {
+		writeJSON(w, map[string]any{"authenticated": true, "email": "", "is_admin": false})
+		return
+	}
+
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		writeJSON(w, map[string]any{"authenticated": false})
+		return
+	}
+
+	email, ok := d.server.sessionStore.Validate(auth[7:])
+	if !ok {
+		writeJSON(w, map[string]any{"authenticated": false})
+		return
+	}
+
+	isAdmin := d.server.userStore.IsAdmin(email)
+	writeJSON(w, map[string]any{"authenticated": true, "email": email, "is_admin": isAdmin})
+}
+
 func (d *DashboardServer) handleTokens(w http.ResponseWriter, r *http.Request) {
+	email, _ := r.Context().Value(ctxKeyEmail).(string)
+
 	switch r.Method {
 	case "GET":
-		entries := d.server.TokenStore().List()
-		writeJSON(w, entries)
+		if d.authRequired && !d.server.userStore.IsAdmin(email) {
+			var userTokens []auth.TokenEntry
+			for _, t := range d.server.TokenStore().List() {
+				if t.Label == email {
+					userTokens = append(userTokens, t)
+				}
+			}
+			writeJSON(w, userTokens)
+		} else {
+			entries := d.server.TokenStore().List()
+			writeJSON(w, entries)
+		}
 
 	case "POST":
-		var req struct {
-			Label string `json:"label"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, `{"error":"invalid request body"}`, 400)
-			return
-		}
-		if req.Label == "" {
-			http.Error(w, `{"error":"label is required"}`, 400)
+		if d.authRequired && email == "" {
+			writeJSON(w, map[string]string{"error": "unauthorized"})
 			return
 		}
 
-		token, err := d.server.TokenStore().Generate(req.Label)
+		label := email
+		if !d.authRequired {
+			var req struct {
+				Label string `json:"label"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, map[string]string{"error": "invalid request body"})
+				return
+			}
+			label = req.Label
+			if label == "" {
+				writeJSON(w, map[string]string{"error": "label is required"})
+				return
+			}
+		}
+
+		token, err := d.server.TokenStore().Generate(label)
 		if err != nil {
 			writeJSON(w, map[string]string{"error": err.Error()})
 			return
 		}
-		slog.Info("token generated", "label", req.Label)
-		writeJSON(w, map[string]string{"token": token, "label": req.Label})
+		if d.authRequired {
+			d.server.userStore.AddToken(email, token)
+		}
+
+		slog.Info("token generated", "label", label)
+		writeJSON(w, map[string]string{"token": token, "label": label})
 
 	default:
 		http.Error(w, `{"error":"method not allowed"}`, 405)
 	}
+}
+
+func (d *DashboardServer) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, `{"error":"method not allowed"}`, 405)
+		return
+	}
+
+	email, _ := r.Context().Value(ctxKeyEmail).(string)
+	if !d.server.userStore.IsAdmin(email) {
+		writeJSON(w, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	users := d.server.userStore.ListUsers()
+	type userInfo struct {
+		Email     string   `json:"email"`
+		Tokens    []string `json:"tokens"`
+		CreatedAt string   `json:"created_at"`
+		IsAdmin   bool     `json:"is_admin"`
+	}
+	result := make([]userInfo, 0, len(users))
+	for _, u := range users {
+		result = append(result, userInfo{
+			Email:     u.Email,
+			Tokens:    u.Tokens,
+			CreatedAt: u.CreatedAt,
+			IsAdmin:   u.IsAdmin,
+		})
+	}
+	writeJSON(w, result)
+}
+
+func (d *DashboardServer) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "DELETE" {
+		http.Error(w, `{"error":"method not allowed"}`, 405)
+		return
+	}
+
+	adminEmail, _ := r.Context().Value(ctxKeyEmail).(string)
+	if !d.server.userStore.IsAdmin(adminEmail) {
+		writeJSON(w, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	targetEmail := r.URL.Path[len("/api/admin/users/"):]
+	if targetEmail == "" {
+		writeJSON(w, map[string]string{"error": "email is required"})
+		return
+	}
+
+	// Remove all tokens owned by this user
+	user := d.server.userStore.ListUsers()
+	for _, u := range user {
+		if u.Email == targetEmail {
+			for _, tok := range u.Tokens {
+				d.server.TokenStore().Remove(tok)
+			}
+			break
+		}
+	}
+
+	if err := d.server.userStore.DeleteUser(targetEmail); err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+
+	slog.Info("admin deleted user", "admin", adminEmail, "target", targetEmail)
+	writeJSON(w, map[string]string{"message": "user deleted"})
 }
 
 func clientToMap(c *ClientSession) map[string]any {
